@@ -27,6 +27,7 @@ spec:
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           args:
             - --host-interface={{ .Values.host.interface }}
+            - --node=$(NODE_NAME)
           {{- if .Values.host.iptables }}
             - --host-ip={{ .Values.host.ip }}
           {{- end }}
@@ -42,11 +43,18 @@ spec:
             - --verbose
           {{- end }}
             - --app-port={{ .Values.host.port }}
+          {{- if .Values.prometheus.metricsPort }}
+            - --metrics-port={{ .Values.prometheus.metricsPort }}
+          {{- end }}
           env:
             - name: HOST_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           {{- if and .Values.aws.secret_key .Values.aws.access_key }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
@@ -63,8 +71,17 @@ spec:
             - name: AWS_DEFAULT_REGION
               value: {{ .Values.aws.region }}
           {{- end }}
+          {{- range $name, $value := .Values.extraEnv }}
+            - name: {{ $name }}
+              value: {{ quote $value }}
+          {{- end }}
           ports:
-            - containerPort: {{ .Values.host.port }}
+            - name: http
+              containerPort: {{ .Values.host.port }}
+            {{- if .Values.prometheus.metricsPort }}
+            - name: metrics
+              containerPort: {{ .Values.prometheus.metricsPort }}
+            {{- end}}
         {{- if .Values.probe }}
           livenessProbe:
             httpGet:
@@ -87,6 +104,9 @@ spec:
     {{- if .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+    {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
     {{- end }}
     {{- if .Values.affinity }}
       affinity:
